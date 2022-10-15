@@ -17,7 +17,7 @@ const roomLength = (room) => {
 };
 
 const setToMenuTimer = (room, timerDefault) => {
-  timerSeconds = timerDefault;
+  let timerSeconds = timerDefault;
   toMenuIntervals.set(room, {
     func: setInterval(() => {
       timerSeconds--;
@@ -47,7 +47,6 @@ const setStepTimer = (me, room) => {
 };
 
 const onWin = (winnerCells, whoWill, step, room, corner) => {
-  winnerFound = true;
   io.to(room).emit("blocked");
   io.to(room).emit("win", winnerCells, corner, step);
   clearInterval(stepIntervals.get(whoWill).func);
@@ -72,6 +71,24 @@ io.on("connection", (socket) => {
       let playerO = `playerO ${roomIndex}`;
       getUserFromRoom("in waiting", 0).join(currentRoom);
       getUserFromRoom("in waiting", 1).join(currentRoom);
+      getUserFromRoom("in waiting", 0).on("disconnecting", () => {
+        io.to(currentRoom).emit("disconnected");
+        setToMenuTimer(currentRoom, 10);
+        try {
+          clearInterval(stepIntervals.get(playerX).func);
+        } catch {
+          clearInterval(stepIntervals.get(playerO).func);
+        }
+      });
+      getUserFromRoom("in waiting", 1).on("disconnecting", () => {
+        io.to(currentRoom).emit("disconnected");
+        setToMenuTimer(currentRoom, 10);
+        try {
+          clearInterval(stepIntervals.get(playerX).func);
+        } catch {
+          clearInterval(stepIntervals.get(playerO).func);
+        }
+      });
       getUserFromRoom(currentRoom, 0).join(playerX);
       getUserFromRoom(currentRoom, 1).join(playerO);
       getUserFromRoom("in waiting", 1).leave("in waiting");
@@ -96,83 +113,92 @@ io.on("connection", (socket) => {
       io.to(whoWill).emit("unblocked");
       let field = cells;
       let winnerCells = [];
-      let winnerFound = false;
       field[id] = step;
       io.to(room).emit("fieldReload", field);
       io.to(whoClicked).emit("blocked");
       io.to(whoWill).emit("unblocked");
       io.to(room).emit("timer reload", roomIndex);
       setStepTimer(whoWill, room);
-      if (!winnerFound) {
-        let stepsInLine;
-        for (let k = 0; k < cellsNumber; k += cellsInLine) {
-          stepsInLine = 0;
-          winnerCells = [];
-          for (j = k; j < k + cellsInLine; j++) {
-            if (cells[j] === step) {
-              stepsInLine++;
-              winnerCells.push(j);
-              if (stepsInLine === cellsInLine) {
-                onWin(winnerCells, whoWill, step, room, "0deg");
+      cellsCheck: for (let k = 0; k <= 4; k++) {
+        if (k===0) {
+          let stepsInLine;
+          for (let k = 0; k < cellsNumber; k += cellsInLine) {
+            stepsInLine = 0;
+            winnerCells = [];
+            for (j = k; j < k + cellsInLine; j++) {
+              if (cells[j] === step) {
+                stepsInLine++;
+                winnerCells.push(j);
+                if (stepsInLine === cellsInLine) {
+                  onWin(winnerCells, whoWill, step, room, "0deg");
+                  break cellsCheck;
+                }
               }
             }
           }
         }
-      }
-      if (!winnerFound) {
-        let stepsInLine;
-        for (let k = 0; k < cellsInLine; k++) {
-          stepsInLine = 0;
-          winnerCells = [];
-          for (j = k; j <= cellsNumber; j += cellsInLine) {
-            if (cells[j] === step) {
-              stepsInLine++;
-              winnerCells.push(j);
-              if (stepsInLine === cellsInLine) {
-                onWin(winnerCells, whoWill, step, room, "90deg");
+        if (k===1) {
+          let stepsInLine;
+          for (let k = 0; k < cellsInLine; k++) {
+            stepsInLine = 0;
+            winnerCells = [];
+            for (j = k; j <= cellsNumber; j += cellsInLine) {
+              if (cells[j] === step) {
+                stepsInLine++;
+                winnerCells.push(j);
+                if (stepsInLine === cellsInLine) {
+                  onWin(winnerCells, whoWill, step, room, "90deg");
+                  break cellsCheck;
+                }
               }
             }
           }
         }
-      }
-      if (!winnerFound) {
-        let stepsInLine = 0;
-        winnerCells = [];
-        for (let k = 0; k < cellsNumber; ) {
-          if (cells[k] === step) {
-            stepsInLine++;
-            winnerCells.push(k);
-            if (stepsInLine === cellsInLine) {
-              onWin(winnerCells, whoWill, step, room, "45deg");
+        if (k===2) {
+          let stepsInLine = 0;
+          winnerCells = [];
+          for (let k = 0; k < cellsNumber; ) {
+            if (cells[k] === step) {
+              stepsInLine++;
+              winnerCells.push(k);
+              if (stepsInLine === cellsInLine) {
+                onWin(winnerCells, whoWill, step, room, "45deg");
+                break cellsCheck;
+              }
+            }
+            k = k + cellsInLine + 1;
+          }
+        }
+        if (k===3) {
+          let stepsInLine = 0;
+          winnerCells = [];
+          for (let k = cellsInLine - 1; k <= cellsNumber - 2; ) {
+            if (cells[k] === step) {
+              stepsInLine++;
+              winnerCells.push(k);
+              if (stepsInLine === cellsInLine) {
+                onWin(winnerCells, whoWill, step, room, "135deg");
+                break cellsCheck;
+              }
+            }
+            k = k + cellsInLine - 1;
+          }
+        }
+        if (k===4) {
+          let busyCells = 0;
+          for (j = 0; j <= cellsInLine * cellsInLine; j++) {
+            if (cells[j] === "x" || cells[j] === "o") {
+              busyCells++;
+            }
+            if (busyCells === 9) {
+              winnerFound = true;
+              io.to(room).emit("blocked");
+              io.to(room).emit("win", [], "", "draw");
+              clearInterval(stepIntervals.get(whoWill).func);
+              setToMenuTimer(room, 12);
+              break cellsCheck;
             }
           }
-          k = k + cellsInLine + 1;
-        }
-      }
-      if (!winnerFound) {
-        let stepsInLine = 0;
-        winnerCells = [];
-        for (k = cellsInLine - 1; k <= cellsNumber - 2; ) {
-          if (cells[k] === step) {
-            stepsInLine++;
-            winnerCells.push(k);
-            if (stepsInLine === cellsInLine) {
-              onWin(winnerCells, whoWill, step, room, "135deg");
-            }
-          }
-          k = k + cellsInLine - 1;
-        }
-      }
-      let busyCells = 0;
-      for (j = 0; j <= cellsInLine * cellsInLine; j++) {
-        if (cells[j] === "x" || cells[j] === "o") {
-          busyCells++;
-        }
-        if (busyCells === cellsInLine * cellsInLine) {
-          io.to(room).emit("blocked");
-          io.to(room).emit("win", [], null, "draw");
-          clearInterval(stepIntervals.get(whoWill).func);
-          setToMenuTimer(room, 12);
         }
       }
     }
