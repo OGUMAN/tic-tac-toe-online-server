@@ -1,9 +1,13 @@
-// initializing the server with http://localhost:8080 that connecting to http://localhost:3000
-const io = require("socket.io")(8080, {
+const express = require('express');
+const app = express();
+const server = require('http').createServer(app);
+const io = require("socket.io")(server, { 
   cors: {
-    origin: ["http://localhost:3000"],
-  },
+    origin: "*"
+  }
 });
+
+const port = process.env.PORT || 8080; // create port relative the host or just localhost:8080
 
 // get user from any room by index
 const getUserFromRoom = (room, index) => {
@@ -228,6 +232,7 @@ io.on("connection", (socket) => {
       io.to(myRoom).emit("blocked");
       if (againVotesIncremented === 2) { // when votes = 2
         clearInterval(toMenuIntervals.get(room).func); // timer to send players to menu stopped
+        toMenuIntervals.get(room).func = undefined;
         io.to(room).emit("restart"); // restart the game
         setStepTimer(myRoom, room); // set timer for first player
       }
@@ -260,3 +265,5 @@ io.on("connection", (socket) => {
     io.to("in waiting").emit("send online", roomLength("im online")); // send number of players to player
   });
 });
+
+server.listen(port);
